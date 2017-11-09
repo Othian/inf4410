@@ -101,4 +101,8 @@ public class Calculateur implements ServerInterface {
 			
 	}
 	
+	public boolean isAlive() throws RemoteException {
+		return true;
+	}
+	
 }

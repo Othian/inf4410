@@ -26,8 +26,10 @@ public class Repartiteur {
 	private ConcurrentLinkedQueue<Tache> listeTaches;
 	private List<Serveur> listeServeurs;
 	private List<TacheThread> listeThreads;
+	private int[] listeResultats;
 	private int currentServeur = 0;
 	private int resultat = 0;
+	private boolean debug;
 	
 	private long debut;
 	private long fin;
@@ -37,21 +39,30 @@ public class Repartiteur {
 	// 3ème argument : Fichier des opérations
 	public static void main(String[] args) {
 		boolean temp_securise;
-		if(args.length != 3) {
-			System.out.println("Le nombre d'arguments n'est pas valide");
-		} else {
-			Repartiteur repartiteur = new Repartiteur(args[0], args[1], args[2]);
+		if(args.length == 4) {
+			Repartiteur repartiteur = new Repartiteur(args[0], args[1], args[2], args[3]);
 			repartiteur.run();
+		} else if(args.length == 3) {
+			Repartiteur repartiteur = new Repartiteur(args[0], args[1], args[2], "");
+			repartiteur.run();
+		} else {
+			System.out.println("Le nombre d'arguments n'est pas valide");
 		}
 	}
 
-	Repartiteur(String mode, String fichierServeurs, String fichierOperations) {
+	Repartiteur(String mode, String fichierServeurs, String fichierOperations, String debug) {
 		if(mode.equals("-s")) {
 			securise = true;
+			System.out.println("Initialisation du répartiteur en mode sécurisé");
 		} else {
 			securise = false;
+			System.out.println("Initialisation du répartiteur en mode non sécurisé");
 		}
 		
+		this.debug = false;
+		if(debug.equals("-debug")) {
+			this.debug = true;
+		}
 		listeServeurs = (ArrayList<Serveur>) Utils.lireFichierServeurs(fichierServeurs);
 		listeOperations = (ConcurrentLinkedQueue<Paire>) Utils.lireFichierOperations(fichierOperations);
 		listeTaches = new ConcurrentLinkedQueue<Tache>();
@@ -61,9 +72,11 @@ public class Repartiteur {
 	private void run() {
 		debut = System.currentTimeMillis();
 		int capacites = 0;
+		System.out.println("Liste des serveurs :");
 		for(Serveur serveur : listeServeurs) {
 			ServerInterface stub = null;
 			capacites += serveur.getCapacite();
+			System.out.println(serveur.getAdresseIP()+":"+serveur.getPort()+" - Capacité : "+serveur.getCapacite());
 			try {
 				Registry registry = LocateRegistry.getRegistry(serveur.getAdresseIP(), Constantes.RMI_REGISTRY_PORT);
 				stub = (ServerInterface) registry.lookup("calculateur-"+Integer.toString(serveur.getPort()));
@@ -81,6 +94,7 @@ public class Repartiteur {
 		tailleTaches = Math.round((float)capacites/listeServeurs.size());
 		
 		// Création des taches
+		System.out.println("Création des tâches");
 		int i = 1;
 		int id = 0;
 		ArrayList<Paire> operations = new ArrayList<Paire>();
@@ -88,7 +102,9 @@ public class Repartiteur {
 			if(i % tailleTaches == 0) {
 				operations.add(listeOperations.poll());
 				Tache tache = new Tache(this, id, operations, Statut.PRET);
-				System.out.println("Création de la tache "+id+" avec "+operations.size()+" opérations");
+				if(debug) {
+					System.out.println("Création de la tache "+id+" avec "+operations.size()+" opérations");
+				}
 				listeTaches.add(tache);
 				operations = new ArrayList<Paire>();
 				i = 1;
@@ -99,6 +115,13 @@ public class Repartiteur {
 			}
 		}
 		
+		if(!operations.isEmpty()) {
+			Tache tache = new Tache(this, id, operations, Statut.PRET);
+			listeTaches.add(tache);
+		}
+		
+		listeResultats = new int[listeTaches.size()];
+		System.out.println(listeTaches.size()+" tâches ont été créées, de taille "+tailleTaches+" opérations");
 		// Création des threads de taches
 		if(securise) {
 			for(int k=0; k<listeServeurs.size(); k++) {
@@ -117,7 +140,6 @@ public class Repartiteur {
 	private synchronized TacheThread creerThread(Tache tache) {
 		TacheThread thread = new TacheThread(tache);
 		listeThreads.add(thread);
-		System.out.println("Création du thread de la tache "+tache.getId());
 		return thread;
 	}
 	
@@ -126,11 +148,18 @@ public class Repartiteur {
 		return listeThreads.size() == 0;
 	}
 	
+	
+	public boolean isDebug() {
+		return debug;
+	}
+
 	public synchronized void onTacheCompleted(Tache tache, TacheThread tacheThread, int resultat) {
 		synchronized(this) {
-			this.resultat = (this.resultat + resultat) % 4000;
+			listeResultats[tache.getId()] = resultat;
 		}
-		System.out.println("Tache "+tache.getId()+" terminée");
+		if(debug) {
+			System.out.println("["+tache.getId()+"] terminée. Résultat : "+resultat);
+		}
 		listeTaches.remove(tache);
 		retirerThread(tacheThread);
 		
@@ -144,6 +173,7 @@ public class Repartiteur {
 	
 	private void travailFait(TacheThread thread) {
 		if(retirerThread(thread)) {
+			calculerResultat();
 			fin = System.currentTimeMillis();
 			System.out.println("Calcul terminé - Résultat : ");
 			System.out.println(resultat);
@@ -151,6 +181,16 @@ public class Repartiteur {
 			double tempsEcoule = ((double)(fin-debut)/1000.0);
 			System.out.println(tempsEcoule+" secondes");
 		}
+		
+	}
+
+	private void calculerResultat() {
+		// TODO Auto-generated method stub
+		for(int i=0; i<listeResultats.length; i++) {
+			resultat+=listeResultats[i];
+		}
+		
+		resultat %= 4000;
 		
 	}
 

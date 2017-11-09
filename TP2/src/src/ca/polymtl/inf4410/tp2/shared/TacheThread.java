@@ -1,5 +1,6 @@
 package ca.polymtl.inf4410.tp2.shared;
 
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,6 +10,7 @@ public class TacheThread extends Thread {
 	private List<Serveur> serveursCourants;
 	private List<Integer> resultats;
 	private List<ConnexionThread> listeThreads;
+	private boolean resultatObtenu;
 	
 	public TacheThread(Tache tache) {
 		super();
@@ -17,6 +19,7 @@ public class TacheThread extends Thread {
 		this.serveursCourants = new ArrayList<Serveur>();
 		this.resultats = new ArrayList<Integer>();
 		this.listeThreads = new ArrayList<ConnexionThread>();
+		this.resultatObtenu = false;
 	}
 	
 	public Tache getTache() {
@@ -26,6 +29,15 @@ public class TacheThread extends Thread {
 	public void run() {
 		selectionnerServeurs();
 		lancerThreads();
+		/*while(!resultatObtenu) {
+			verifierServeurs();
+			try {
+				synchronized(this) {
+					this.wait(1000);
+				}
+			} catch (InterruptedException e) {
+			}
+		}*/
 	}
 	
 	private synchronized void lancerThreads() {
@@ -34,17 +46,29 @@ public class TacheThread extends Thread {
 		}
 	}
 	
+	/*private synchronized void verifierServeurs() {
+		for(Serveur srv : serveursCourants) {
+			try {
+				srv.getStub().isAlive();
+			} catch (RemoteException e) {
+				Serveur newSrv = ajouterServeur();
+				lancerThread(newSrv);
+			}
+		}
+	}*/
+	
 	private void lancerThread(Serveur srv) {
 		ConnexionThread srvThread = new ConnexionThread(srv, this);
-		System.out.println("Thread serveur - Tache : "+tache.getId()+" - IP : "+srv.getAdresseIP()+" - Port : "+srv.getPort());
+		if(tache.getRepartiteur().isDebug()) {
+			System.out.println("["+tache.getId()+"] Serveur sélectionné : "+srv.getAdresseIP()+":"+srv.getPort());
+		}
 		listeThreads.add(srvThread);
 		srvThread.start();
 	}
 	
 	private void selectionnerServeurs() {
 		if(tache.getRepartiteur().getSecurise()) {
-			Serveur srv1 = ajouterServeur();
-			System.out.println("Serveur selectionné - IP : "+srv1.getAdresseIP()+" - Port : "+srv1.getPort());
+			ajouterServeur();
 		} else {
 			ajouterServeur();
 			ajouterServeur();
@@ -86,6 +110,7 @@ public class TacheThread extends Thread {
 	
 	public synchronized boolean verifierResultats() {
 		if(tache.getRepartiteur().getSecurise()) {
+			resultatObtenu = true;
 			tache.getRepartiteur().onTacheCompleted(tache, this, resultats.get(0));
 			return true;
 		} else {
@@ -95,6 +120,7 @@ public class TacheThread extends Thread {
 				int target = resultats.get(j);
 				for(int i=j+1; i<resultats.size(); i++) {
 					if(resultats.get(i) == target) {
+						resultatObtenu = true;
 						tache.getRepartiteur().onTacheCompleted(tache, this, target);
 						return true;
 					}

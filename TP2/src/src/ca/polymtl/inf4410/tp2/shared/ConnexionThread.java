@@ -19,10 +19,14 @@ public class ConnexionThread extends Thread {
 	public void run() {
 		try {
 			int resultat = serveur.getStub().calculerOperations((ArrayList<Paire>) tacheThread.getTache().getListeOperations());
-			System.out.println("["+tacheThread.getTache().getId()+"] Serveur "+serveur.getAdresseIP()+" - port : "+serveur.getPort()+" - Résultat : "+resultat);
+			if(tacheThread.getTache().getRepartiteur().isDebug()) {
+				System.out.println("["+tacheThread.getTache().getId()+"] Serveur "+serveur.getAdresseIP()+":"+serveur.getPort()+" - Résultat : "+resultat);
+			}
 			tacheThread.onConnexionEvent(this, Statut.REUSSIE, resultat);
 		} catch (RemoteException e) {
-			e.printStackTrace();
+			if(tacheThread.getTache().getRepartiteur().isDebug()) {
+				System.out.println("["+tacheThread.getTache().getId()+"] Serveur "+serveur.getAdresseIP()+":"+serveur.getPort()+" - Injoignable");
+			}
 			tacheThread.onConnexionEvent(this, Statut.ECHEC, -1);
 		}
 	}
