@@ -1,0 +1,18 @@
+rm -r TP2_rep
+rm -r TP2_srv1
+rm -r TP2_srv2
+cp -r TP2 TP2_rep
+cp -r TP2 TP2_srv1
+cp -r TP2 TP2_srv2
+cd TP2_rep
+ant
+chmod +x client
+cd ..
+cd TP2_srv1
+ant
+chmod +x server
+cd ..
+cd TP2_srv2
+ant
+chmod +x server
+cd ..
